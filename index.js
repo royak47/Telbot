@@ -17,15 +17,11 @@ const teraboxUrlRegex = /^https:\/\/(terabox\.com|1024terabox\.com|teraboxapp\.c
 
 // ✅ /start Command
 bot.start((ctx) => {
-    ctx.replyWithPhoto(
-        { url: 'https://graph.org/file/4e8a1172e8ba4b7a0bdfa.jpg' },
-        {
-            caption: '👋 Welcome! Send a valid TeraBox link to get a direct download link.',
-            parse_mode: 'Markdown',
-            ...Markup.inlineKeyboard([
-                [Markup.button.url('📌 Join Updates Channel', 'https://t.me/GenAIbetabot')]
-            ])
-        }
+    ctx.reply(
+        '👋 Welcome! Send a valid TeraBox link to get a direct download link.',
+        Markup.inlineKeyboard([
+            [Markup.button.url('📌 Join Updates Channel', 'https://t.me/GenAIbetabot')]
+        ])
     );
 });
 
@@ -54,13 +50,15 @@ bot.on('text', async (ctx) => {
         const size = info["📏 Size"] || "Unknown";
         const estimatedTime = calculateDownloadTime(size);
 
-        await ctx.replyWithPhoto('https://graph.org/file/120e174a9161afae40914.jpg', {
-            caption: `🎬 *File Ready!*\n\n📁 *Name:* ${filename}\n⚖ *Size:* ${size}\n⏳ *Estimated Time:* ${estimatedTime}`,
-            parse_mode: 'Markdown',
-            ...Markup.inlineKeyboard([
-                [Markup.button.url(`⬇️ Download (${size})`, downloadLink)]
-            ])
-        });
+        await ctx.reply(
+            `🎬 *File Ready!*\n\n📁 *Name:* ${filename}\n⚖ *Size:* ${size}\n⏳ *Estimated Time:* ${estimatedTime}`,
+            {
+                parse_mode: 'Markdown',
+                ...Markup.inlineKeyboard([
+                    [Markup.button.url(`⬇️ Download (${size})`, downloadLink)]
+                ])
+            }
+        );
 
     } catch (err) {
         console.error('Error:', err);
