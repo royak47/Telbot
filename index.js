@@ -23,7 +23,7 @@ bot.start((ctx) => {
             caption: '👋 Welcome! Send a valid TeraBox link to get a direct download link.',
             parse_mode: 'Markdown',
             ...Markup.inlineKeyboard([
-                [Markup.button.url('📌 Join Updates Channel', 'https://t.me/Opleech_WD')]
+                [Markup.button.url('📌 Join Updates Channel', 'https://t.me/GenAIbetabot')]
             ])
         }
     );
