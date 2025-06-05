@@ -1,92 +1,71 @@
 import 'dotenv/config';
 import express from 'express';
 import { Telegraf, Markup } from 'telegraf';
+import fetch from 'node-fetch';
 
-// ✅ Load from .env
+// ✅ Load env
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 3000;
 const bot = new Telegraf(BOT_TOKEN);
 
-// ✅ Express Keep-Alive
+// ✅ Web keep-alive
 const app = express();
-app.get('/', (req, res) => res.send('🤖 Bot is live!'));
-app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+app.get('/', (_, res) => res.send('🤖 TeraBox bot running'));
+app.listen(PORT, () => console.log(`🚀 Server on port ${PORT}`));
 
-// ✅ TeraBox URL Validation
-const teraboxUrlRegex = /^https:\/\/(terabox\.com|1024terabox\.com|teraboxapp\.com|teraboxlink\.com|terasharelink\.com|terafileshare\.com)\/s\/[A-Za-z0-9-_]+$/;
+// ✅ TeraBox link checker
+const validLink = (text) =>
+  /^https:\/\/(terabox|1024terabox|teraboxapp|teraboxlink|terasharelink|terafileshare)\.com\/s\/[A-Za-z0-9\-_]+$/.test(text);
 
-// ✅ /start Command
-bot.start((ctx) => {
-    ctx.reply(
-        '👋 Welcome! Send a valid TeraBox link to get a direct download link.',
-        Markup.inlineKeyboard([
-            [Markup.button.url('📌 Join Updates Channel', 'https://t.me/GenAIbetabot')]
-        ])
-    );
-});
+// ✅ /start command
+bot.start((ctx) =>
+  ctx.reply(
+    `👋 Welcome to TeraBox Bot!\n\nJust send a valid TeraBox link to get the direct download link.`
+  )
+);
 
-// ✅ Message Handler
+// ✅ On message
 bot.on('text', async (ctx) => {
-    const link = ctx.message.text;
+  const link = ctx.message.text;
 
-    if (!teraboxUrlRegex.test(link)) {
-        return ctx.reply('❌ Invalid TeraBox link!');
+  if (!validLink(link)) {
+    return ctx.reply('❌ Invalid TeraBox link!');
+  }
+
+  await ctx.reply('⏳ Processing your link...');
+
+  try {
+    const res = await fetch(`https://teraboxdown.pages.dev/api?url=${encodeURIComponent(link)}`);
+    const json = await res.json();
+
+    if (!json || !json.success || !json.data?.length) {
+      return ctx.reply('⚠️ Could not extract download link.');
     }
 
-    await ctx.reply('🔄 Processing your link...');
+    const file = json.data[0];
+    const downloadLink = file.downloadUrl;
+    const filename = file.fileName || 'TeraBox_File';
 
-    try {
-        const apiUrl = `https://wdzone-terabox-api.vercel.app/api?url=${encodeURIComponent(link)}`;
-        const res = await fetch(apiUrl);
-        const data = await res.json();
-
-        const info = Array.isArray(data["📜 Extracted Info"]) ? data["📜 Extracted Info"][0] : null;
-        if (!info || !info["🔽 Direct Download Link"]) {
-            return ctx.reply('⚠️ Could not extract download link.');
-        }
-
-        const downloadLink = info["🔽 Direct Download Link"];
-        const filename = info["📂 Title"] || `video_${Date.now()}.mp4`;
-        const size = info["📏 Size"] || "Unknown";
-        const estimatedTime = calculateDownloadTime(size);
-
-        await ctx.reply(
-            `🎬 *File Ready!*\n\n📁 *Name:* ${filename}\n⚖ *Size:* ${size}\n⏳ *Estimated Time:* ${estimatedTime}`,
-            {
-                parse_mode: 'Markdown',
-                ...Markup.inlineKeyboard([
-                    [Markup.button.url(`⬇️ Download (${size})`, downloadLink)]
-                ])
-            }
-        );
-
-    } catch (err) {
-        console.error('Error:', err);
-        ctx.reply('❌ Something went wrong. Please try again later.');
-    }
+    await ctx.reply(
+      `✅ *Link Extracted!*\n\n📁 *File:* ${filename}\n🔗 *Download:* [Click Here](${downloadLink})`,
+      {
+        parse_mode: 'Markdown',
+        disable_web_page_preview: false,
+        ...Markup.inlineKeyboard([
+          [Markup.button.url('⬇️ Download', downloadLink)]
+        ])
+      }
+    );
+  } catch (err) {
+    console.error('Fetch Error:', err);
+    ctx.reply('❌ Error processing the link. Try again later.');
+  }
 });
 
-// ✅ Estimated Download Time Calculator
-function calculateDownloadTime(sizeStr) {
-    const match = sizeStr.match(/^([\d.]+)\s*(B|KB|MB|GB)$/i);
-    if (!match) return "N/A";
-
-    const [_, value, unit] = match;
-    const sizeInBytes = parseFloat(value) * {
-        B: 1, KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3
-    }[unit.toUpperCase()];
-
-    const speedMbps = 10;
-    const timeSec = (sizeInBytes * 8) / (speedMbps * 1024 * 1024);
-    return timeSec < 60 ? `${Math.round(timeSec)} sec` : `${(timeSec / 60).toFixed(1)} min`;
-}
-
-// ✅ Error Catching
-bot.catch(err => {
-    console.error('Bot Error:', err);
+// ✅ Catch all errors
+bot.catch((err) => {
+  console.error('Bot Error:', err);
 });
 
-// ✅ Launch Bot
-bot.launch().then(() => {
-    console.log('🤖 Bot is running!');
-});
+// ✅ Start
+bot.launch();
