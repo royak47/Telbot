@@ -1,74 +1,84 @@
 import 'dotenv/config';
 import express from 'express';
-import { Telegraf } from 'telegraf';
+import { Telegraf, Markup } from 'telegraf';
 import puppeteer from 'puppeteer';
 
+// ✅ Load ENV
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const PORT = process.env.PORT || 3000;
-
 const bot = new Telegraf(BOT_TOKEN);
 
-// Express server (keep-alive)
+// ✅ Keep-alive express server
 const app = express();
-app.get('/', (_, res) => res.send('🤖 TeraBox bot is running'));
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.get('/', (_, res) => res.send('🤖 TeraBox bot is running!'));
+app.listen(PORT, () => console.log(`🚀 Server on port ${PORT}`));
 
-// Function to fetch direct download link using Puppeteer
-async function fetchDownloadLink(teraboxLink) {
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-  });
-  const page = await browser.newPage();
-
-  await page.goto('https://teraboxdown.pages.dev/', { waitUntil: 'networkidle2' });
-
-  // Paste TeraBox link into input box
-  await page.type('#url', teraboxLink);
-
-  // Click the "Fetch File" button
-  await page.click('#fetchFile');
-
-  // Wait for result (selector may vary, verify in page)
-  await page.waitForSelector('.result-download-link a', { timeout: 15000 });
-
-  // Extract download URL
-  const downloadLink = await page.$eval('.result-download-link a', el => el.href);
-
-  await browser.close();
-  return downloadLink;
-}
-
-// Link validation regex
+// ✅ TeraBox link checker
 const validLink = (text) =>
-  /^https:\/\/(terabox|1024terabox|teraboxapp|teraboxlink|terasharelink|terafileshare)\.com\/s\/[A-Za-z0-9\-_]+$/.test(text);
+  /^https:\/\/(terabox|1024terabox|teraboxapp|teraboxlink|terasharelink|terafileshare|teraboxshare)\.com\/s\/[A-Za-z0-9\-_]+$/.test(text);
 
-// /start command
-bot.start((ctx) => {
+// ✅ Start command
+bot.start((ctx) =>
   ctx.reply(
-    '👋 Welcome! Send me a valid TeraBox link, and I will fetch the direct download link for you.'
-  );
-});
+    `👋 Welcome to *TeraBox Downloader Bot*!\n\n📥 Just send a valid TeraBox link to get the download link.`,
+    { parse_mode: 'Markdown' }
+  )
+);
 
-// On text message
+// ✅ Message Handler
 bot.on('text', async (ctx) => {
   const link = ctx.message.text.trim();
 
   if (!validLink(link)) {
-    return ctx.reply('❌ Invalid TeraBox link! Please send a valid link.');
+    return ctx.reply('❌ Invalid TeraBox link!');
   }
 
-  await ctx.reply('⏳ Processing your link, please wait...');
+  await ctx.reply('⏳ Scraping download link, please wait...');
 
   try {
-    const directLink = await fetchDownloadLink(link);
-    await ctx.replyWithMarkdown(
-      `✅ *Direct Download Link Found!*\n\n[Click here to download](${directLink})`
+    const browser = await puppeteer.launch({
+      headless: 'new',
+      executablePath: '/usr/bin/chromium', // For Termux, update path if needed
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    });
+
+    const page = await browser.newPage();
+    await page.goto('https://teraboxdown.pages.dev/', { waitUntil: 'networkidle2' });
+
+    await page.type('input[type="text"]', link);
+    await page.click('button:has-text("Fetch Files")');
+
+    await page.waitForSelector('a[href^="https://"]', { timeout: 15000 });
+
+    const fileData = await page.evaluate(() => {
+      const anchor = document.querySelector('a[href^="https://"]');
+      const name = anchor?.textContent?.trim();
+      const url = anchor?.href;
+      return { name, url };
+    });
+
+    await browser.close();
+
+    if (!fileData?.url) {
+      return ctx.reply('⚠️ Could not extract the download link. Try again later.');
+    }
+
+    await ctx.reply(
+      `✅ *Download Ready!*\n\n📁 *File:* ${fileData.name || 'Unknown'}\n🔗 [Click Here to Download](${fileData.url})`,
+      {
+        parse_mode: 'Markdown',
+        disable_web_page_preview: false,
+        ...Markup.inlineKeyboard([[Markup.button.url('⬇️ Download Now', fileData.url)]]),
+      }
     );
   } catch (err) {
-    console.error('Error fetching download link:', err);
-    await ctx.reply('❌ Failed to fetch download link. Please try again later.');
+    console.error('Scrape Error:', err);
+    ctx.reply('❌ Failed to scrape the download link. Please try again later.');
   }
 });
 
+// ✅ Error handling
+bot.catch((err) => console.error('Bot Error:', err));
+
+// ✅ Start the bot
 bot.launch();
