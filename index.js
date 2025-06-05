@@ -13,14 +13,15 @@ const app = express();
 app.get('/', (_, res) => res.send('🤖 TeraBox bot running'));
 app.listen(PORT, () => console.log(`🚀 Server on port ${PORT}`));
 
-// ✅ TeraBox link checker
+// ✅ TeraBox link checker (updated to include teraboxshare.com)
 const validLink = (text) =>
-  /^https:\/\/(terabox|1024terabox|teraboxapp|teraboxlink|terasharelink|terafileshare)\.com\/s\/[A-Za-z0-9\-_]+$/.test(text);
+  /^https:\/\/(terabox|1024terabox|teraboxapp|teraboxlink|terasharelink|terafileshare|teraboxshare)\.com\/s\/[A-Za-z0-9\-_]+$/.test(text);
 
 // ✅ /start command
 bot.start((ctx) =>
   ctx.reply(
-    `👋 Welcome to TeraBox Bot!\n\nJust send a valid TeraBox link to get the direct download link.`
+    `👋 Welcome to *TeraBox Bot!*\n\nJust send a valid TeraBox link to get the direct download link.`,
+    { parse_mode: 'Markdown' }
   )
 );
 
