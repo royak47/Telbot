@@ -1,72 +1,74 @@
 import 'dotenv/config';
 import express from 'express';
-import { Telegraf, Markup } from 'telegraf';
-import fetch from 'node-fetch';
+import { Telegraf } from 'telegraf';
+import puppeteer from 'puppeteer';
 
-// ✅ Load env
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const PORT = process.env.PORT || 3000;
+
 const bot = new Telegraf(BOT_TOKEN);
 
-// ✅ Web keep-alive
+// Express server (keep-alive)
 const app = express();
-app.get('/', (_, res) => res.send('🤖 TeraBox bot running'));
-app.listen(PORT, () => console.log(`🚀 Server on port ${PORT}`));
+app.get('/', (_, res) => res.send('🤖 TeraBox bot is running'));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
-// ✅ TeraBox link checker (updated to include teraboxshare.com)
+// Function to fetch direct download link using Puppeteer
+async function fetchDownloadLink(teraboxLink) {
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  });
+  const page = await browser.newPage();
+
+  await page.goto('https://teraboxdown.pages.dev/', { waitUntil: 'networkidle2' });
+
+  // Paste TeraBox link into input box
+  await page.type('#url', teraboxLink);
+
+  // Click the "Fetch File" button
+  await page.click('#fetchFile');
+
+  // Wait for result (selector may vary, verify in page)
+  await page.waitForSelector('.result-download-link a', { timeout: 15000 });
+
+  // Extract download URL
+  const downloadLink = await page.$eval('.result-download-link a', el => el.href);
+
+  await browser.close();
+  return downloadLink;
+}
+
+// Link validation regex
 const validLink = (text) =>
-  /^https:\/\/(terabox|1024terabox|teraboxapp|teraboxlink|terasharelink|terafileshare|teraboxshare)\.com\/s\/[A-Za-z0-9\-_]+$/.test(text);
+  /^https:\/\/(terabox|1024terabox|teraboxapp|teraboxlink|terasharelink|terafileshare)\.com\/s\/[A-Za-z0-9\-_]+$/.test(text);
 
-// ✅ /start command
-bot.start((ctx) =>
+// /start command
+bot.start((ctx) => {
   ctx.reply(
-    `👋 Welcome to *TeraBox Bot!*\n\nJust send a valid TeraBox link to get the direct download link.`,
-    { parse_mode: 'Markdown' }
-  )
-);
+    '👋 Welcome! Send me a valid TeraBox link, and I will fetch the direct download link for you.'
+  );
+});
 
-// ✅ On message
+// On text message
 bot.on('text', async (ctx) => {
-  const link = ctx.message.text;
+  const link = ctx.message.text.trim();
 
   if (!validLink(link)) {
-    return ctx.reply('❌ Invalid TeraBox link!');
+    return ctx.reply('❌ Invalid TeraBox link! Please send a valid link.');
   }
 
-  await ctx.reply('⏳ Processing your link...');
+  await ctx.reply('⏳ Processing your link, please wait...');
 
   try {
-    const res = await fetch(`https://teraboxdown.pages.dev/api?url=${encodeURIComponent(link)}`);
-    const json = await res.json();
-
-    if (!json || !json.success || !json.data?.length) {
-      return ctx.reply('⚠️ Could not extract download link.');
-    }
-
-    const file = json.data[0];
-    const downloadLink = file.downloadUrl;
-    const filename = file.fileName || 'TeraBox_File';
-
-    await ctx.reply(
-      `✅ *Link Extracted!*\n\n📁 *File:* ${filename}\n🔗 *Download:* [Click Here](${downloadLink})`,
-      {
-        parse_mode: 'Markdown',
-        disable_web_page_preview: false,
-        ...Markup.inlineKeyboard([
-          [Markup.button.url('⬇️ Download', downloadLink)]
-        ])
-      }
+    const directLink = await fetchDownloadLink(link);
+    await ctx.replyWithMarkdown(
+      `✅ *Direct Download Link Found!*\n\n[Click here to download](${directLink})`
     );
   } catch (err) {
-    console.error('Fetch Error:', err);
-    ctx.reply('❌ Error processing the link. Try again later.');
+    console.error('Error fetching download link:', err);
+    await ctx.reply('❌ Failed to fetch download link. Please try again later.');
   }
 });
 
-// ✅ Catch all errors
-bot.catch((err) => {
-  console.error('Bot Error:', err);
-});
-
-// ✅ Start
 bot.launch();
